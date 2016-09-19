@@ -63,6 +63,9 @@ static void _UG_PutChar( char chr, UG_S16 x, UG_S16 y, UG_COLOR fc, UG_COLOR bc,
  /* Pointer to the gui */
 static UG_GUI* gui;
 
+/* External memory allocation function */
+static void*(*allocFunc)(UG_U32);
+
 UG_S16 UG_Init( UG_GUI* g, void (*p)(UG_S16,UG_S16,UG_COLOR), UG_S16 x, UG_S16 y )
 {
    UG_U8 i;
@@ -1459,45 +1462,196 @@ void UG_WaitForUpdate( void )
    #endif
 }
 
+void UG_RegisterMalloc( void* func )
+{
+    allocFunc = func;
+}
+
 void UG_DrawBMP( UG_S16 xp, UG_S16 yp, UG_BMP* bmp )
 {
-   UG_S16 x,y,xs;
+   UG_S16 x,y,xe,ye;
    UG_U8 r,g,b;
-   UG_U16* p;
-   UG_U16 tmp;
+
+   UG_U16* p_16;
+   UG_U16 tmp_16;
+
+   UG_U32* p_32;
+
    UG_COLOR c;
+
 
    if ( bmp->p == NULL ) return;
 
-   /* Only support 16 BPP so far */
-   if ( bmp->bpp == BMP_BPP_16 )
-   {
-      p = (UG_U16*)bmp->p;
-   }
+        if ( bmp->bpp == BMP_BPP_16 )  p_16 = (UG_U16*) bmp->p;
+   else if ( bmp->bpp == BMP_BPP_24 )  p_32 = (UG_U32*) bmp->p;
    else
+       return;
+
+
+   for ( y = yp, ye = y + bmp->height; y < ye; y++ )
    {
-      return;
+      for( x = xp, xe = x + bmp->width; x < xe; x++ )
+      {
+         if ( bmp->bpp == BMP_BPP_16 )
+         {
+             tmp_16 = *p_16++;
+
+             /* Convert RGB565 to RGB888 */
+             r = (tmp_16 >> 11) & 0x1F;
+             r <<= 3;
+
+             g = (tmp_16 >> 5) & 0x3F;
+             g <<= 2;
+
+             b = (tmp_16 & 0x1F);
+             b <<= 3;
+
+             c = ((UG_COLOR) r << 16) | ((UG_COLOR) g << 8) | (UG_COLOR) b;
+
+
+             UG_DrawPixel(x, y, c);
+         }
+
+         else if ( bmp->bpp == BMP_BPP_24 )
+             UG_DrawPixel(x, y, *p_32++);
+      }
    }
 
-   xs = xp;
-   for(y=0;y<bmp->height;y++)
-   {
-      xp = xs;
-      for(x=0;x<bmp->width;x++)
-      {
-         tmp = *p++;
-         /* Convert RGB565 to RGB888 */
-         r = (tmp>>11)&0x1F;
-         r<<=3;
-         g = (tmp>>5)&0x3F;
-         g<<=2;
-         b = (tmp)&0x1F;
-         b<<=3;
-         c = ((UG_COLOR)r<<16) | ((UG_COLOR)g<<8) | (UG_COLOR)b;
-         UG_DrawPixel( xp++ , yp , c );
-      }
-      yp++;
-   }
+   /* Is hardware acceleration available? */
+   if ( gui->driver[DRIVER_UPDATE_AREA].state & DRIVER_ENABLED )
+      ((UG_RESULT(*)(UG_S16 x1, UG_S16 y1, UG_S16 x2, UG_S16 y2)) gui->driver[DRIVER_UPDATE_AREA].driver)(xp,yp,xe-1,ye-1);
+}
+
+UG_RESULT UG_LoadBMPFromBuffer( UG_U8* buff, UG_U32 buffSize, UG_BMP* bmp )
+{
+/*
+ *  The basic BMP file structure:
+ *
+ *  The File Header (14 bytes)
+ *      bfType      2   The characters "BM"
+ *      bfSize      4   The size of the file in bytes
+ *      bfReserved1 2   Unused - must be zero
+ *      bfReserved2 2   Unused - must be zero
+ *      bfOffBits   4   Offset to start of Pixel Data
+ *
+ *  The Image Header (40 bytes in the versions of interest)
+ *      biSize          4   Header Size - Must be at least 40
+ *      biWidth         4   Image width in pixels
+ *      biHeight        4   Image height in pixels
+ *      biPlanes        2   Must be 1
+ *      biBitCount      2   Bits per pixel - 1, 4, 8, 16, 24, or 32
+ *      biCompression   4   Compression type (0 = uncompressed)
+ *      biSizeImage     4   Image Size - may be zero for uncompressed images
+ *      biXPelsPerMeter 4   Preferred resolution in pixels per meter
+ *      biYPelsPerMeter 4   Preferred resolution in pixels per meter
+ *      biClrUsed       4   Number Color Map entries that are actually used
+ *      biClrImportant  4   Number of significant colors
+ *
+ *  The Color Table (length varies and is not always present)
+ *      Provides the color palette for bit depths of 8 or less.
+ *      Provides the (optional) bit masks for bit depths of 16 and 32.
+ *      Not used for 24-bit images.
+ *
+ *  The Pixel Data
+ *      Pixel by pixel color information
+ *      Row-by-row, bottom to top.
+ *      Rows start on double word (4-byte) boundaries and are null padded if necessary.
+ *      Each row is column-by-column, left to right.
+ *      In 24-bit images, color order is Red, Green, Blue.
+ *      In images less than 8-bits, the higher order bits are the left-most pixels.
+ */
+
+    UG_U32
+        idx = 0,
+        f_size = 0,
+        f_offset = 0,
+        iHeaderSize = 0,
+
+        x,y,y_inv;
+
+
+    // Asserts usable pointers and a minimum file size (54 Bytes = The File Header (14 bytes) + The Image Header (40 bytes))
+    if (( buff == NULL ) || ( buffSize < 54 ) || ( bmp == NULL ))
+        return UG_RESULT_FAIL;
+
+
+    // FILE HEADER
+
+    // Checks magic header
+    if ( buff[idx++] != (UG_U8)'B' || buff[idx++] != (UG_U8)'M' )
+        return UG_RESULT_FAIL;
+
+    // Validates the file size
+    f_size = *((UG_U32*) & buff[idx]);
+    if ( f_size != buffSize )
+        return UG_RESULT_FAIL;
+
+    idx += 4 + 2 + 2;
+    // Validate and store the Data Offset
+    f_offset = *((UG_U32*) & buff[idx]);
+    if ( f_offset > buffSize )
+        return UG_RESULT_FAIL;
+
+    idx += 4;
+
+
+    // IMAGE HEADER
+    iHeaderSize = *((UG_U32*) & buff[idx]);
+    if ( iHeaderSize < 40 )
+        return UG_RESULT_FAIL;
+
+    idx += 4;
+
+
+    // Width
+    bmp->width = (UG_U16) *((UG_U32*) & buff[idx]);
+    idx += 4;
+
+    // Height
+    bmp->height = (UG_U16) *((UG_U32*) & buff[idx]);
+    idx += 4;
+
+    // Planes
+    idx += 2;
+
+    // Color Depth
+    bmp->bpp = (UG_U8) *((UG_U16*) & buff[idx]);
+
+
+    // Allocate Memory
+
+         if ( bmp->bpp == BMP_BPP_1 )   return UG_RESULT_FAIL;
+    else if ( bmp->bpp == BMP_BPP_4 )   return UG_RESULT_FAIL;
+    else if ( bmp->bpp == BMP_BPP_8 )   return UG_RESULT_FAIL;
+    else if ( bmp->bpp == BMP_BPP_16 )  return UG_RESULT_FAIL;
+    else if ( bmp->bpp == BMP_BPP_24 )  bmp->p = allocFunc(sizeof(UG_U32) * (bmp->width * bmp->height));
+    else if ( bmp->bpp == BMP_BPP_32 )  return UG_RESULT_FAIL;
+    else
+        return UG_RESULT_FAIL;
+
+
+    if ( bmp->p == NULL )
+        return UG_RESULT_FAIL;
+
+
+    // READ THE PIXEL DATA
+    for ( y = 0, y_inv = bmp->height -1; y < bmp->height; y_inv--, y++ )
+    {
+        for( x = 0; x < bmp->width; x++ )
+        {
+            if ( bmp->bpp == BMP_BPP_24 )
+            {
+                UG_U8
+                    b = buff[f_offset + (y_inv * ((((3*bmp->width) +3)/4))*4) + (3*x) + 0],
+                    g = buff[f_offset + (y_inv * ((((3*bmp->width) +3)/4))*4) + (3*x) + 1],
+                    r = buff[f_offset + (y_inv * ((((3*bmp->width) +3)/4))*4) + (3*x) + 2];
+
+                ((UG_U32*)bmp->p)[(y * bmp->width) + x] = (r << 16) | (g << 8) | b;
+            }
+        }
+    }
+
+    return UG_RESULT_OK;
 }
 
 void UG_TouchUpdate( UG_S16 xp, UG_S16 yp, UG_U8 state )

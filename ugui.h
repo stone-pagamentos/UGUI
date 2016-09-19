@@ -23,9 +23,9 @@
 /* -------------------------------------------------------------------------------- */
 /* -- DEFINES                                                                    -- */
 /* -------------------------------------------------------------------------------- */
-#ifndef NULL
+
 #define NULL ((void*) 0)
-#endif
+
 
 /* Alignments */
 #define ALIGN_H_LEFT                                  (1<<0)
@@ -75,7 +75,7 @@ typedef enum
 {
 	FONT_TYPE_1BPP,
 	FONT_TYPE_8BPP,
-    FONT_TYPE_VECTOR_1BPP 
+    FONT_TYPE_VECTOR_1BPP
 } FONT_TYPE;
 
 #ifdef USE_FONT_VECTOR_CYRILLIC
@@ -156,15 +156,17 @@ typedef struct
    UG_U8 colors;
 } UG_BMP;
 
-#define BMP_BPP_1                                     (1<<0)
-#define BMP_BPP_2                                     (1<<1)
-#define BMP_BPP_4                                     (1<<2)
-#define BMP_BPP_8                                     (1<<3)
-#define BMP_BPP_16                                    (1<<4)
-#define BMP_BPP_32                                    (1<<5)
-#define BMP_RGB888                                    (1<<0)
-#define BMP_RGB565                                    (1<<1)
-#define BMP_RGB555                                    (1<<2)
+#define BMP_BPP_1   1
+#define BMP_BPP_4   4
+#define BMP_BPP_8   8
+#define BMP_BPP_16  16
+#define BMP_BPP_24  24
+#define BMP_BPP_32  32
+
+#define BMP_RGB555      0
+#define BMP_RGB565      1
+#define BMP_RGB888      2
+#define BMP_RGB101010   3
 
 /* -------------------------------------------------------------------------------- */
 /* -- MESSAGE                                                                    -- */
@@ -372,7 +374,7 @@ typedef struct
 /* Checkbox structure */
 typedef struct
 {
-   UG_OBJECT* obj; 
+   UG_OBJECT* obj;
    UG_U8 state;
    UG_U8 style;
    UG_COLOR fc;
@@ -432,7 +434,7 @@ typedef struct
 /* Textbox structure */
 typedef struct
 {
-   UG_OBJECT* obj; 
+   UG_OBJECT* obj;
    char* str;
    const UG_FONT* font;
    UG_U8 style;
@@ -471,7 +473,7 @@ typedef struct
 /* Image structure */
 typedef struct
 {
-   UG_OBJECT* obj; 
+   UG_OBJECT* obj;
    void* img;
    UG_U8 type;
 } UG_IMAGE;
@@ -514,10 +516,11 @@ typedef struct
 #define DRIVER_ENABLED                                (1<<1)
 
 /* Supported drivers */
-#define NUMBER_OF_DRIVERS                             3
+#define NUMBER_OF_DRIVERS                             4
 #define DRIVER_DRAW_LINE                              0
 #define DRIVER_FILL_FRAME                             1
 #define DRIVER_FILL_AREA                              2
+#define DRIVER_UPDATE_AREA                            3
 
 /* -------------------------------------------------------------------------------- */
 /* -- µGUI CORE STRUCTURE                                                        -- */
@@ -878,6 +881,16 @@ void UG_GetVectFont(UG_FONT *font, UG_U16 w, UG_U16 h);
 /* Miscellaneous functions */
 void UG_WaitForUpdate( void );
 void UG_Update( void );
+
+/* To avoid code coupling and to achieve generality in memory usage,
+ * a function to memory allocation (malloc or the like) must be registered. */
+void UG_RegisterMalloc( void* func );
+
+/* Loads a UG_BMP type from the raw byte-buffer of a BMP file.
+ * Currently only 24bits images are supported.  */
+UG_RESULT UG_LoadBMPFromBuffer( UG_U8* buff, UG_U32 buffSize, UG_BMP* bmp );
+
+/* Now supports drawing 16bits and 24bits UG_BMP variables */
 void UG_DrawBMP( UG_S16 xp, UG_S16 yp, UG_BMP* bmp );
 void UG_TouchUpdate( UG_S16 xp, UG_S16 yp, UG_U8 state );
 
