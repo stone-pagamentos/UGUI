@@ -67,7 +67,7 @@ static UG_GUI* gui;
 static void*(*allocFunc)(UG_U32);
 
 /* External memory release function */
-static void*(*freeFunc)(UG_U32);
+static void*(*freeFunc)(void*);
 
 UG_S16 UG_Init( UG_GUI* g, void (*p)(UG_S16,UG_S16,UG_COLOR), UG_S16 x, UG_S16 y )
 {
@@ -1709,7 +1709,10 @@ UG_RESULT UG_FreeBMP( UG_BMP* bmp )
         return UG_RESULT_FAIL;
 
     if ( bmp->p != NULL )
+    {
         freeFunc( bmp->p );
+        bmp->p = NULL;
+    }
 
     return UG_RESULT_OK;
 }

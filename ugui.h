@@ -888,7 +888,7 @@ void UG_RegisterMalloc( void* func );
 
 /* To avoid code coupling and to achieve generality in memory usage,
  * a function to memory release (free or the like) must be registered. */
-void UG_RegisterFree( UG_BMP* bmp );
+void UG_RegisterFree( void* func );
 
 /* Loads a UG_BMP type from the raw byte-buffer of a BMP file.
  * Currently only 1bit and 24bits images are supported.  */
