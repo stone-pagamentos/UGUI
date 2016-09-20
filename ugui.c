@@ -1522,8 +1522,10 @@ void UG_DrawBMP( UG_S16 xp, UG_S16 yp, UG_BMP* bmp )
       ((UG_RESULT(*)(UG_S16 x1, UG_S16 y1, UG_S16 x2, UG_S16 y2)) gui->driver[DRIVER_UPDATE_AREA].driver)(xp,yp,xe-1,ye-1);
 }
 
+
 UG_RESULT UG_LoadBMPFromBuffer( UG_U8* buff, UG_U32 buffSize, UG_BMP* bmp )
 {
+#define FIT_BYTE_ALLIGNED_MEM(num, al) ((((num)+(al-1))/(al))*(al))
 /*
  *  The basic BMP file structure:
  *
@@ -1629,7 +1631,7 @@ UG_RESULT UG_LoadBMPFromBuffer( UG_U8* buff, UG_U32 buffSize, UG_BMP* bmp )
     else
         return UG_RESULT_FAIL;
 
-
+    // Abort if allocation failed
     if ( bmp->p == NULL )
         return UG_RESULT_FAIL;
 
@@ -1641,15 +1643,19 @@ UG_RESULT UG_LoadBMPFromBuffer( UG_U8* buff, UG_U32 buffSize, UG_BMP* bmp )
         {
             if ( bmp->bpp == BMP_BPP_24 )
             {
+                UG_U32 pxShift = f_offset + (y_inv * FIT_BYTE_ALLIGNED_MEM((3*bmp->width), 4)) + (3*x);
+
                 UG_U8
-                    b = buff[f_offset + (y_inv * ((((3*bmp->width) +3)/4))*4) + (3*x) + 0],
-                    g = buff[f_offset + (y_inv * ((((3*bmp->width) +3)/4))*4) + (3*x) + 1],
-                    r = buff[f_offset + (y_inv * ((((3*bmp->width) +3)/4))*4) + (3*x) + 2];
+                    b = buff[pxShift + 0],
+                    g = buff[pxShift + 1],
+                    r = buff[pxShift + 2];
 
                 ((UG_U32*)bmp->p)[(y * bmp->width) + x] = (r << 16) | (g << 8) | b;
             }
         }
     }
+
+#undef FIT_BYTE_ALLIGNED_MEM
 
     return UG_RESULT_OK;
 }
