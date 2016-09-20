@@ -66,6 +66,9 @@ static UG_GUI* gui;
 /* External memory allocation function */
 static void*(*allocFunc)(UG_U32);
 
+/* External memory release function */
+static void*(*freeFunc)(UG_U32);
+
 UG_S16 UG_Init( UG_GUI* g, void (*p)(UG_S16,UG_S16,UG_COLOR), UG_S16 x, UG_S16 y )
 {
    UG_U8 i;
@@ -1467,61 +1470,83 @@ void UG_RegisterMalloc( void* func )
     allocFunc = func;
 }
 
+void UG_RegisterFree( void* func )
+{
+    freeFunc = func;
+}
+
 void UG_DrawBMP( UG_S16 xp, UG_S16 yp, UG_BMP* bmp )
 {
    UG_S16 x,y,xe,ye;
    UG_U8 r,g,b;
 
+   UG_U8*  p_8;
    UG_U16* p_16;
-   UG_U16 tmp_16;
-
    UG_U32* p_32;
+
+   UG_U16 tmp_16;
 
    UG_COLOR c;
 
 
+   // Abort if there is no image
    if ( bmp->p == NULL ) return;
 
-        if ( bmp->bpp == BMP_BPP_16 )  p_16 = (UG_U16*) bmp->p;
-   else if ( bmp->bpp == BMP_BPP_24 )  p_32 = (UG_U32*) bmp->p;
-   else
-       return;
+    switch(bmp->bpp)
+    {
+        case BMP_BPP_1:   p_8 = (UG_U8*) bmp->p; break;
+        case BMP_BPP_4:   return;
+        case BMP_BPP_8:   return;
+        case BMP_BPP_16:  p_16 = (UG_U16*) bmp->p; break;
+        case BMP_BPP_24:  p_32 = (UG_U32*) bmp->p; break;
+        case BMP_BPP_32:  return;
+        default:
+            return;
+    }
 
+    // Draws image
+    for ( y = yp, ye = y + bmp->height; y < ye; y++ )
+    {
+        for( x = xp, xe = x + bmp->width; x < xe; x++ )
+        {
+            switch(bmp->bpp)
+            {
+                case BMP_BPP_1:
+                {
+                    UG_DrawPixel(x, y, ((*p_8++) ? C_WHITE : C_BLACK));
+                } break;
 
-   for ( y = yp, ye = y + bmp->height; y < ye; y++ )
-   {
-      for( x = xp, xe = x + bmp->width; x < xe; x++ )
-      {
-         if ( bmp->bpp == BMP_BPP_16 )
-         {
-             tmp_16 = *p_16++;
+                case BMP_BPP_16:
+                {
+                    tmp_16 = *p_16++;
 
-             /* Convert RGB565 to RGB888 */
-             r = (tmp_16 >> 11) & 0x1F;
-             r <<= 3;
+                    /* Convert RGB565 to RGB888 */
+                    r = (tmp_16 >> 11) & 0x1F;
+                    r <<= 3;
 
-             g = (tmp_16 >> 5) & 0x3F;
-             g <<= 2;
+                    g = (tmp_16 >> 5) & 0x3F;
+                    g <<= 2;
 
-             b = (tmp_16 & 0x1F);
-             b <<= 3;
+                    b = (tmp_16 & 0x1F);
+                    b <<= 3;
 
-             c = ((UG_COLOR) r << 16) | ((UG_COLOR) g << 8) | (UG_COLOR) b;
+                    c = ((UG_COLOR) r << 16) | ((UG_COLOR) g << 8) | (UG_COLOR) b;
 
+                    UG_DrawPixel(x, y, c);
+                } break;
 
-             UG_DrawPixel(x, y, c);
-         }
+                case BMP_BPP_24:
+                {
+                    UG_DrawPixel(x, y, *p_32++);
+                } break;
+            }
+        }
+    }
 
-         else if ( bmp->bpp == BMP_BPP_24 )
-             UG_DrawPixel(x, y, *p_32++);
-      }
-   }
-
-   /* Is hardware acceleration available? */
-   if ( gui->driver[DRIVER_UPDATE_AREA].state & DRIVER_ENABLED )
-      ((UG_RESULT(*)(UG_S16 x1, UG_S16 y1, UG_S16 x2, UG_S16 y2)) gui->driver[DRIVER_UPDATE_AREA].driver)(xp,yp,xe-1,ye-1);
+    /* Is hardware acceleration available? */
+    if ( gui->driver[DRIVER_UPDATE_AREA].state & DRIVER_ENABLED )
+        ((UG_RESULT(*)(UG_S16 x1, UG_S16 y1, UG_S16 x2, UG_S16 y2)) gui->driver[DRIVER_UPDATE_AREA].driver)(xp,yp,xe-1,ye-1);
 }
-
 
 UG_RESULT UG_LoadBMPFromBuffer( UG_U8* buff, UG_U32 buffSize, UG_BMP* bmp )
 {
@@ -1620,16 +1645,23 @@ UG_RESULT UG_LoadBMPFromBuffer( UG_U8* buff, UG_U32 buffSize, UG_BMP* bmp )
     bmp->bpp = (UG_U8) *((UG_U16*) & buff[idx]);
 
 
-    // Allocate Memory
+    // Allocate Memory for Pixels
 
-         if ( bmp->bpp == BMP_BPP_1 )   return UG_RESULT_FAIL;
-    else if ( bmp->bpp == BMP_BPP_4 )   return UG_RESULT_FAIL;
-    else if ( bmp->bpp == BMP_BPP_8 )   return UG_RESULT_FAIL;
-    else if ( bmp->bpp == BMP_BPP_16 )  return UG_RESULT_FAIL;
-    else if ( bmp->bpp == BMP_BPP_24 )  bmp->p = allocFunc(sizeof(UG_U32) * (bmp->width * bmp->height));
-    else if ( bmp->bpp == BMP_BPP_32 )  return UG_RESULT_FAIL;
-    else
+    // Abort if no allocation function is registered
+    if ( allocFunc == NULL )
         return UG_RESULT_FAIL;
+
+    switch(bmp->bpp)
+    {
+        case BMP_BPP_1:   bmp->p = allocFunc(sizeof(UG_U8) * bmp->width * bmp->height); break;
+        case BMP_BPP_4:   return UG_RESULT_FAIL;
+        case BMP_BPP_8:   return UG_RESULT_FAIL;
+        case BMP_BPP_16:  return UG_RESULT_FAIL;
+        case BMP_BPP_24:  bmp->p = allocFunc(sizeof(UG_U32) * bmp->width * bmp->height); break;
+        case BMP_BPP_32:  return UG_RESULT_FAIL;
+        default:
+            return UG_RESULT_FAIL;
+    }
 
     // Abort if allocation failed
     if ( bmp->p == NULL )
@@ -1641,16 +1673,26 @@ UG_RESULT UG_LoadBMPFromBuffer( UG_U8* buff, UG_U32 buffSize, UG_BMP* bmp )
     {
         for( x = 0; x < bmp->width; x++ )
         {
-            if ( bmp->bpp == BMP_BPP_24 )
+            switch(bmp->bpp)
             {
-                UG_U32 pxShift = f_offset + (y_inv * FIT_BYTE_ALLIGNED_MEM((3*bmp->width), 4)) + (3*x);
+                case BMP_BPP_1:
+                {
+                    UG_U32 pxShift = f_offset + (y_inv * FIT_BYTE_ALLIGNED_MEM((bmp->width / 8), 4)) + (x/8);
 
-                UG_U8
-                    b = buff[pxShift + 0],
-                    g = buff[pxShift + 1],
-                    r = buff[pxShift + 2];
+                    ((UG_U8*)bmp->p)[(y * bmp->width) + x] = (buff[pxShift] >> ((7-x) % 8)) & 0x01;
+                } break;
 
-                ((UG_U32*)bmp->p)[(y * bmp->width) + x] = (r << 16) | (g << 8) | b;
+                case BMP_BPP_24:
+                {
+                    UG_U32 pxShift = f_offset + (y_inv * FIT_BYTE_ALLIGNED_MEM((3 * bmp->width), 4)) + (3*x);
+
+                    UG_U8
+                        b = buff[pxShift + 0],
+                        g = buff[pxShift + 1],
+                        r = buff[pxShift + 2];
+
+                    ((UG_U32*)bmp->p)[(y * bmp->width) + x] = (r << 16) | (g << 8) | b;
+                } break;
             }
         }
     }
@@ -1659,6 +1701,19 @@ UG_RESULT UG_LoadBMPFromBuffer( UG_U8* buff, UG_U32 buffSize, UG_BMP* bmp )
 
     return UG_RESULT_OK;
 }
+
+UG_RESULT UG_FreeBMP( UG_BMP* bmp )
+{
+    // Abort if no release function is registered
+    if ( freeFunc == NULL )
+        return UG_RESULT_FAIL;
+
+    if ( bmp->p != NULL )
+        freeFunc( bmp->p );
+
+    return UG_RESULT_OK;
+}
+
 
 void UG_TouchUpdate( UG_S16 xp, UG_S16 yp, UG_U8 state )
 {

@@ -886,11 +886,18 @@ void UG_Update( void );
  * a function to memory allocation (malloc or the like) must be registered. */
 void UG_RegisterMalloc( void* func );
 
+/* To avoid code coupling and to achieve generality in memory usage,
+ * a function to memory release (free or the like) must be registered. */
+void UG_RegisterFree( UG_BMP* bmp );
+
 /* Loads a UG_BMP type from the raw byte-buffer of a BMP file.
- * Currently only 24bits images are supported.  */
+ * Currently only 1bit and 24bits images are supported.  */
 UG_RESULT UG_LoadBMPFromBuffer( UG_U8* buff, UG_U32 buffSize, UG_BMP* bmp );
 
-/* Now supports drawing 16bits and 24bits UG_BMP variables */
+/* Frees any memory allocated in UG_LoadBMPFromBuffer */
+UG_RESULT UG_FreeBMP( UG_BMP* bmp );
+
+/* Now supports drawing 1bit, 16bits and 24bits UG_BMP variables */
 void UG_DrawBMP( UG_S16 xp, UG_S16 yp, UG_BMP* bmp );
 void UG_TouchUpdate( UG_S16 xp, UG_S16 yp, UG_U8 state );
 
