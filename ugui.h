@@ -897,6 +897,13 @@ UG_RESULT UG_LoadBMPFromBuffer( UG_U8* buff, UG_U32 buffSize, UG_BMP* bmp );
 /* Frees any memory allocated in UG_LoadBMPFromBuffer */
 UG_RESULT UG_FreeBMP( UG_BMP* bmp );
 
+/* Loads several UG_BMP sprites from the raw byte-buffer of a BMP file.
+ * Currently only 1bit and 24bits images are supported.
+ * Currently expects sprites with same dimensions:
+ * -> 'Full BMP Height' % rows == 0 && 'Full BMP Width' % cols == 0.
+ * 'spriteList' must have (rows * cols) available elements. */
+UG_RESULT UG_LoadBMPSpritesFromBuffer( const UG_U8* buff, const UG_U32 buffSize, const UG_S16 rows, const UG_S16 cols, UG_BMP* spriteList );
+
 /* Now supports drawing 1bit, 16bits and 24bits UG_BMP variables */
 void UG_DrawBMP( UG_S16 xp, UG_S16 yp, UG_BMP* bmp );
 void UG_TouchUpdate( UG_S16 xp, UG_S16 yp, UG_U8 state );

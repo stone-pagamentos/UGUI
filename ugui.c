@@ -1702,6 +1702,161 @@ UG_RESULT UG_LoadBMPFromBuffer( UG_U8* buff, UG_U32 buffSize, UG_BMP* bmp )
     return UG_RESULT_OK;
 }
 
+
+UG_RESULT UG_LoadBMPSpritesFromBuffer( const UG_U8* buff, const UG_U32 buffSize, const UG_S16 rows, const UG_S16 cols, UG_BMP* spriteList )
+{
+#define FIT_BYTE_ALLIGNED_MEM(num, al) ((((num)+(al-1))/(al))*(al))
+
+    UG_U32
+        idx = 0;
+
+
+    // Abort if no allocation function is registered
+    if (allocFunc == NULL)
+        return UG_RESULT_FAIL;
+
+    // Asserts usable pointers and a minimum file size (54 Bytes = The File Header (14 bytes) + The Image Header (40 bytes))
+    if ((buff == NULL) || (buffSize < 54) || (rows == 0) || (cols == 0) || (spriteList == NULL))
+        return UG_RESULT_FAIL;
+
+    const int sprites = rows * cols;
+
+
+    // FILE HEADER
+
+    // Checks magic header
+    if ( buff[idx++] != (UG_U8)'B' || buff[idx++] != (UG_U8)'M' )
+        return UG_RESULT_FAIL;
+
+    // Validates the file size
+    const UG_U32 f_size = *((UG_U32*) & buff[idx]);
+    if ( f_size != buffSize )
+        return UG_RESULT_FAIL;
+
+    idx += 4 + 2 + 2;
+    // Validate and store the Data Offset
+    const UG_U32 f_offset = *((UG_U32*) & buff[idx]);
+    if ( f_offset > buffSize )
+        return UG_RESULT_FAIL;
+
+    idx += 4;
+
+
+    // IMAGE HEADER
+    const UG_U32 iHeaderSize = *((UG_U32*) & buff[idx]);
+    if ( iHeaderSize < 40 )
+        return UG_RESULT_FAIL;
+
+    idx += 4;
+
+
+    // Width - Validate cols
+    const totalWidth = (UG_U16) *((UG_U32*) & buff[idx]);
+    if (totalWidth % cols != 0)
+        return UG_RESULT_FAIL;
+
+    idx += 4;
+
+
+    // Height - Validate rows
+    const totalHeight = (UG_U16) *((UG_U32*) & buff[idx]);
+    if (totalHeight % rows != 0)
+        return UG_RESULT_FAIL;
+
+    idx += 4;
+
+    // Planes
+    idx += 2;
+
+    // Color Depth
+    const bitsPerPixel = (UG_U8) *((UG_U16*) & buff[idx]);
+
+
+    // Calculating sprite constants
+    const int
+        spriteHeight = totalHeight / rows,
+        spriteWidth  = totalWidth  / cols,
+        spritePixels = spriteHeight * spriteWidth;
+
+    // For each sprite
+    for ( int sIdx = 0; sIdx < sprites; sIdx++ )
+    {
+        UG_BMP* sprite = & spriteList[sIdx];
+
+        sprite->height = spriteHeight;
+        sprite->width  = spriteWidth;
+        sprite->bpp    = bitsPerPixel;
+
+
+        // Allocate Memory for Pixels
+        switch(bitsPerPixel)
+        {
+            case BMP_BPP_1:   sprite->p = allocFunc(sizeof(UG_U8) * spritePixels); break;
+            case BMP_BPP_4:   return UG_RESULT_FAIL;
+            case BMP_BPP_8:   return UG_RESULT_FAIL;
+            case BMP_BPP_16:  return UG_RESULT_FAIL;
+            case BMP_BPP_24:  sprite->p = allocFunc(sizeof(UG_U32) * spritePixels); break;
+            case BMP_BPP_32:  return UG_RESULT_FAIL;
+            default:
+                return UG_RESULT_FAIL;
+        }
+
+        // Abort if allocation failed
+        if (sprite->p == NULL)
+            return UG_RESULT_FAIL;
+
+
+        // The sprite starting points, in the image plane
+        int spriteYs = ((totalHeight / rows) * (sIdx / rows));
+        int spriteXs = ((totalWidth  / cols) * (sIdx % rows));
+
+        // READ THE PIXEL DATA
+        switch(bitsPerPixel)
+        {
+/*
+            case BMP_BPP_1:
+            {
+                const int bmpBytesPerLine = FIT_BYTE_ALLIGNED_MEM((3 * totalWidth), 4);
+
+                UG_U32 pxShift = f_offset + (y_inv * bmpBytesPerLine) + (x/8);
+
+                ((UG_U8*)bmp->p)[(y * bmp->width) + x] = (buff[pxShift] >> ((7-x) % 8)) & 0x01;
+            } break;
+*/
+            case BMP_BPP_24:
+            {
+                const int bmpBytesPerLine = FIT_BYTE_ALLIGNED_MEM((3 * totalWidth), 4);
+
+                for ( int y = 0; y < spriteHeight; y++ )
+                {
+                    UG_U32
+                        bmpPxShift   = f_offset + ((spriteYs + (spriteHeight -1) - y) * bmpBytesPerLine),
+                        spriteYShift = y * spriteWidth;
+
+                    for ( int x = 0; x < spriteWidth; x++ )
+                    {
+                        bmpPxShift += 3*x;
+
+                        UG_U32
+                            b = (UG_U32) buff[bmpPxShift + 0],
+                            g = (UG_U32) buff[bmpPxShift + 1],
+                            r = (UG_U32) buff[bmpPxShift + 2];
+
+                        ((UG_U32*)sprite->p)[spriteYShift + x] = (r << 16) | (g << 8) | b;
+                    }
+                }
+
+            } break;
+        }
+    }
+
+
+#undef FIT_BYTE_ALLIGNED_MEM
+
+    return UG_RESULT_OK;
+}
+
+
 UG_RESULT UG_FreeBMP( UG_BMP* bmp )
 {
     // Abort if no release function is registered
