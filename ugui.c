@@ -1702,8 +1702,8 @@ UG_RESULT UG_LoadBMPFromBuffer( UG_U8* buff, UG_U32 buffSize, UG_BMP* bmp )
     return UG_RESULT_OK;
 }
 
-#include "BR_Debug.h"
-UG_RESULT UG_LoadBMPSpritesFromBuffer( const UG_U8* buff, const UG_U32 buffSize, const UG_S16 rows, const UG_S16 cols, UG_BMP* spriteList )
+
+UG_RESULT UG_LoadBMPSpritesFromBuffer( const UG_U8* buff, const UG_U32 buffSize, const UG_U32 rows, const UG_U32 cols, UG_BMP* spriteList )
 {
 #define FIT_BYTE_ALLIGNED_MEM(num, al) ((((num)+(al-1))/(al))*(al))
 
@@ -1719,7 +1719,8 @@ UG_RESULT UG_LoadBMPSpritesFromBuffer( const UG_U8* buff, const UG_U32 buffSize,
     if ((buff == NULL) || (buffSize < 54) || (rows == 0) || (cols == 0) || (spriteList == NULL))
         return UG_RESULT_FAIL;
 
-    const int sprites = rows * cols;
+
+    const UG_U32 sprites = rows * cols;
 
 
     // FILE HEADER
@@ -1751,7 +1752,7 @@ UG_RESULT UG_LoadBMPSpritesFromBuffer( const UG_U8* buff, const UG_U32 buffSize,
 
 
     // Width - Validate cols
-    const totalWidth = (UG_U16) *((UG_U32*) & buff[idx]);
+    const UG_U32 totalWidth = *((UG_U32*) & buff[idx]);
     if (totalWidth % cols != 0)
         return UG_RESULT_FAIL;
 
@@ -1759,7 +1760,7 @@ UG_RESULT UG_LoadBMPSpritesFromBuffer( const UG_U8* buff, const UG_U32 buffSize,
 
 
     // Height - Validate rows
-    const totalHeight = (UG_U16) *((UG_U32*) & buff[idx]);
+    const UG_U32 totalHeight = *((UG_U32*) & buff[idx]);
     if (totalHeight % rows != 0)
         return UG_RESULT_FAIL;
 
@@ -1769,18 +1770,23 @@ UG_RESULT UG_LoadBMPSpritesFromBuffer( const UG_U8* buff, const UG_U32 buffSize,
     idx += 2;
 
     // Color Depth
-    const bitsPerPixel = (UG_U8) *((UG_U16*) & buff[idx]);
+    const UG_U8 bitsPerPixel = (UG_U8) *((UG_U16*) & buff[idx]);
 
 
     // Calculating sprite constants
-    const int
+    const UG_U32
         spriteHeight = totalHeight / rows,
         spriteWidth  = totalWidth  / cols,
         spritePixels = spriteHeight * spriteWidth;
 
     // For each sprite
-    for ( int sIdx = 0; sIdx < sprites; sIdx++ )
+    for ( UG_U32 sIdx = 0; sIdx < sprites; sIdx++ )
     {
+        // The sprite starting points, in the image plane
+        const UG_U32
+            spriteYs = ((totalHeight / rows) * (sIdx / cols)),
+            spriteXs = ((totalWidth  / cols) * (sIdx % cols));
+
         UG_BMP* sprite = & spriteList[sIdx];
 
         sprite->height = spriteHeight;
@@ -1806,23 +1812,13 @@ UG_RESULT UG_LoadBMPSpritesFromBuffer( const UG_U8* buff, const UG_U32 buffSize,
             return UG_RESULT_FAIL;
 
 
-        // The sprite starting points, in the image plane
-        int spriteYs = ((totalHeight / rows) * (sIdx / cols));
-        int spriteXs = ((totalWidth  / cols) * (sIdx % cols));
-
-        BR_DEBUG_LOG_WARNING("spriteHeight: %d", spriteHeight);
-        BR_DEBUG_LOG_WARNING("spriteWidth: %d", spriteWidth);
-        BR_DEBUG_LOG_WARNING("bitsPerPixel: %d", bitsPerPixel);
-        BR_DEBUG_LOG_WARNING("spriteYs: %d", spriteYs);
-        BR_DEBUG_LOG_WARNING("spriteXs: %d", spriteXs);
-
         // READ THE PIXEL DATA
         switch(bitsPerPixel)
         {
 /*
             case BMP_BPP_1:
             {
-                const int bmpBytesPerLine = FIT_BYTE_ALLIGNED_MEM((3 * totalWidth), 4);
+                const UG_U32 bmpBytesPerLine = FIT_BYTE_ALLIGNED_MEM((3 * totalWidth), 4);
 
                 UG_U32 pxShift = f_offset + (y_inv * bmpBytesPerLine) + (x/8);
 
@@ -1831,35 +1827,27 @@ UG_RESULT UG_LoadBMPSpritesFromBuffer( const UG_U8* buff, const UG_U32 buffSize,
 */
             case BMP_BPP_24:
             {
-                const int bmpBytesPerLine = FIT_BYTE_ALLIGNED_MEM((3 * totalWidth), 4);
+                const UG_U32 bmpBytesPerLine = FIT_BYTE_ALLIGNED_MEM((3 * totalWidth), 4);
 
-                //BR_DEBUG_LOG_WARNING("bmpBytesPerLine: %d", bmpBytesPerLine);
+                UG_U32 r, g, b;
 
-                for ( int y = 0; y < spriteHeight; y++ )
+                for ( UG_U32 y = 0; y < spriteHeight; y++ )
                 {
-                    UG_U32
-                        bmpPxShift   = f_offset + ((totalHeight - 1 - spriteYs - y) * bmpBytesPerLine) + (3*spriteXs),
+                    const UG_U32
                         spriteYShift = y * spriteWidth;
 
-                    //BR_DEBUG_LOG_WARNING("bmpPxShift: %d", bmpPxShift);
-                   // BR_DEBUG_LOG_WARNING("spriteYShift: %d", spriteYShift);
-                    //BR_DEBUG_LOG_WARNING("spriteWidth: %d", spriteWidth);
+                    UG_U32 bmpPxShift = f_offset + ((totalHeight - 1 - spriteYs - y) * bmpBytesPerLine) + (3*spriteXs);
 
-                    for ( int x = 0; x < spriteWidth; x++ )
+                    for ( UG_U32 x = 0; x < spriteWidth; x++ )
                     {
-                        //BR_DEBUG_LOG_WARNING("bmpPxShift: %d", bmpPxShift);
-
-                        UG_U8
-                            b = buff[bmpPxShift + 0] & 0xFF,
-                            g = buff[bmpPxShift + 1] & 0xFF,
-                            r = buff[bmpPxShift + 2] & 0xFF;
+                        b = buff[bmpPxShift + 0] & 0xFF,
+                        g = buff[bmpPxShift + 1] & 0xFF,
+                        r = buff[bmpPxShift + 2] & 0xFF;
 
                         bmpPxShift += 3;
 
                         ((UG_U32*)sprite->p)[spriteYShift + x] = (r << 16) | (g << 8) | b;
                     }
-
-                    //BR_DEBUG_LOG_WARNING("bmpPxShift: %d", bmpPxShift);
                 }
 
             } break;

@@ -7,6 +7,25 @@
 
 //#define USE_MULTITASKING
 
+/* Log macro definitions */
+#define ENABLE_LOG
+#ifdef ENABLE_LOG
+    /* If ENABLE_LOG is defined, will execute these macros as LOG functions */
+    #include "BR_Debug.h"
+    #define UG_LOG_L()   BR_DEBUG_LOG_LDEBUG()
+    #define UG_LOG_I(L)  BR_DEBUG_LOG_INFO((L))
+    #define UG_LOG_D(L)  BR_DEBUG_LOG_DEBUG((L))
+    #define UG_LOG_W(L)  BR_DEBUG_LOG_WARNING((L))
+    #define UG_LOG_E(L)  BR_DEBUG_LOG_ERROR((L))
+#else
+    /* If ENABLE_LOG is undefined, will replace all these definitions by nothing */
+    #define UG_LOG_L()  0
+    #define UG_LOG_I(L) 0
+    #define UG_LOG_D(L) 0
+    #define UG_LOG_W(L) 0
+    #define UG_LOG_E(L) 0
+#endif
+
 /* Enable color mode */
 #define USE_COLOR_RGB888   // RGB = 0xFF,0xFF,0xFF
 //#define USE_COLOR_RGB565   // RGB = 0bRRRRRGGGGGGBBBBB

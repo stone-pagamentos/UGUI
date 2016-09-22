@@ -902,7 +902,7 @@ UG_RESULT UG_FreeBMP( UG_BMP* bmp );
  * Currently expects sprites with same dimensions:
  * -> 'Full BMP Height' % rows == 0 && 'Full BMP Width' % cols == 0.
  * 'spriteList' must have (rows * cols) available elements. */
-UG_RESULT UG_LoadBMPSpritesFromBuffer( const UG_U8* buff, const UG_U32 buffSize, const UG_S16 rows, const UG_S16 cols, UG_BMP* spriteList );
+UG_RESULT UG_LoadBMPSpritesFromBuffer( const UG_U8* buff, const UG_U32 buffSize, const UG_U32 rows, const UG_U32 cols, UG_BMP* spriteList );
 
 /* Now supports drawing 1bit, 16bits and 24bits UG_BMP variables */
 void UG_DrawBMP( UG_S16 xp, UG_S16 yp, UG_BMP* bmp );
