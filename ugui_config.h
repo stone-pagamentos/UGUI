@@ -12,18 +12,18 @@
 #ifdef ENABLE_LOG
     /* If ENABLE_LOG is defined, will execute these macros as LOG functions */
     #include "BR_Debug.h"
-    #define UG_LOG_L()   BR_DEBUG_LOG_LDEBUG()
-    #define UG_LOG_I(L)  BR_DEBUG_LOG_INFO((L))
-    #define UG_LOG_D(L)  BR_DEBUG_LOG_DEBUG((L))
-    #define UG_LOG_W(L)  BR_DEBUG_LOG_WARNING((L))
-    #define UG_LOG_E(L)  BR_DEBUG_LOG_ERROR((L))
+    #define UG_LOG_L    BR_DEBUG_LOG_LDEBUG
+    #define UG_LOG_I    BR_DEBUG_LOG_INFO
+    #define UG_LOG_D    BR_DEBUG_LOG_DEBUG
+    #define UG_LOG_W    BR_DEBUG_LOG_WARNING
+    #define UG_LOG_E    BR_DEBUG_LOG_ERROR
 #else
     /* If ENABLE_LOG is undefined, will replace all these definitions by nothing */
-    #define UG_LOG_L()  0
-    #define UG_LOG_I(L) 0
-    #define UG_LOG_D(L) 0
-    #define UG_LOG_W(L) 0
-    #define UG_LOG_E(L) 0
+    #define UG_LOG_L    0
+    #define UG_LOG_I    0
+    #define UG_LOG_D    0
+    #define UG_LOG_W    0
+    #define UG_LOG_E    0
 #endif
 
 /* Enable color mode */
