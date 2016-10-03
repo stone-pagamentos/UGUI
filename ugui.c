@@ -1490,7 +1490,7 @@ void UG_DrawBMP( UG_S16 xp, UG_S16 yp, UG_BMP* bmp )
 
 
    // Abort if there is no image
-   if ( bmp->p == NULL ) return;
+   if ((bmp == NULL) || (bmp->p == NULL)) return;
 
     switch(bmp->bpp)
     {
@@ -1545,7 +1545,7 @@ void UG_DrawBMP( UG_S16 xp, UG_S16 yp, UG_BMP* bmp )
 
     /* Is hardware acceleration available? */
     if ( gui->driver[DRIVER_UPDATE_AREA].state & DRIVER_ENABLED )
-        ((UG_RESULT(*)(UG_S16 x1, UG_S16 y1, UG_S16 x2, UG_S16 y2)) gui->driver[DRIVER_UPDATE_AREA].driver)(xp,yp,xe,ye);
+        ((UG_RESULT(*)(UG_S16 x1, UG_S16 y1, UG_S16 x2, UG_S16 y2)) gui->driver[DRIVER_UPDATE_AREA].driver)(xp,yp,MIN(xe, gui->x_dim - 1),MIN(ye, gui->y_dim - 1));
 }
 
 UG_RESULT UG_LoadBMPFromBuffer( UG_U8* buff, UG_U32 buffSize, UG_BMP* bmp )
@@ -1701,7 +1701,6 @@ UG_RESULT UG_LoadBMPFromBuffer( UG_U8* buff, UG_U32 buffSize, UG_BMP* bmp )
 
     return UG_RESULT_OK;
 }
-
 
 UG_RESULT UG_LoadBMPSpritesFromBuffer( const UG_U8* buff, const UG_U32 buffSize, const UG_U32 rows, const UG_U32 cols, UG_BMP* spriteList )
 {
@@ -1860,6 +1859,197 @@ UG_RESULT UG_LoadBMPSpritesFromBuffer( const UG_U8* buff, const UG_U32 buffSize,
     return UG_RESULT_OK;
 }
 
+UG_RESULT UG_ConvertBMPToGrayScale( UG_BMP* bmp )
+{
+    UG_U8 r,g,b;
+
+    UG_U8*  p_8;
+    UG_U16* p_16;
+    UG_U32* p_32;
+
+    UG_U32 gray;
+
+    UG_COLOR c;
+
+
+    // Abort if there is no image
+    if ((bmp == NULL) || (bmp->p == NULL))
+        return UG_RESULT_FAIL;
+
+    // Select available BitPerPixel
+    switch(bmp->bpp)
+    {
+        case BMP_BPP_1:   return UG_RESULT_FAIL;
+        case BMP_BPP_4:   return UG_RESULT_FAIL;
+        case BMP_BPP_8:   return UG_RESULT_FAIL;
+        case BMP_BPP_16:  return UG_RESULT_FAIL;
+        case BMP_BPP_24:  p_32 = (UG_U32*) bmp->p; break;
+        case BMP_BPP_32:  return UG_RESULT_FAIL;
+        default:
+            return UG_RESULT_FAIL;
+    }
+
+    // Gray-Scale
+    for ( UG_S16 y = 0, h = bmp->height; y < h; y++ )
+    {
+        for( UG_S16 x = 0, w = bmp->width; x < w; x++ )
+        {
+            switch(bmp->bpp)
+            {
+                case BMP_BPP_24:
+                {
+                    c = p_32[(y*w)+x];
+
+                    b = (c & 0x0000FF);
+                    g = (c & 0x00FF00) >> 8;
+                    r = (c & 0xFF0000) >> 16;
+
+                    gray = ( (UG_U32) MAX(r,MAX(g,b)) + (UG_U32) MIN(r,MIN(g,b))) >> 1;
+
+                    p_32[(y*w)+x] = (gray << 16) | (gray << 8) | gray;
+                }
+            }
+        }
+    }
+
+    return UG_RESULT_OK;
+}
+
+UG_RESULT UG_ConvertBMPGrayToDithering( UG_BMP* bmp )
+{
+    UG_U8 r,g,b;
+
+    UG_U8*  p_8;
+    UG_U16* p_16;
+    UG_U32* p_32;
+
+    UG_U32 c;
+
+
+    // Abort if there is no image
+    if ((bmp == NULL) || (bmp->p == NULL))
+        return UG_RESULT_FAIL;
+
+    // Select available BitPerPixel
+    switch(bmp->bpp)
+    {
+        case BMP_BPP_1:   return UG_RESULT_FAIL;
+        case BMP_BPP_4:   return UG_RESULT_FAIL;
+        case BMP_BPP_8:   return UG_RESULT_FAIL;
+        case BMP_BPP_16:  return UG_RESULT_FAIL;
+        case BMP_BPP_24:  p_32 = (UG_U32*) bmp->p; break;
+        case BMP_BPP_32:  return UG_RESULT_FAIL;
+        default:
+            return UG_RESULT_FAIL;
+    }
+
+
+    {
+        // Histogram
+
+        UG_U32
+            histo[256] = {0};
+
+        for ( UG_S16 y = 0, h = bmp->height; y < h; y++ )
+            for( UG_S16 x = 0, w = bmp->width; x < w; x++ )
+                histo[ (p_32[(y*w)+x] & 0x0000FF) ]++;
+
+
+        // Thresholding
+
+        UG_U8
+            threshold = 0;
+
+        UG_U32
+            totalWeight = 0,
+            halfWeight = 0;
+
+        for ( UG_S16 i = 0; i < 256; i++ )
+            totalWeight += histo[i];
+
+        halfWeight = totalWeight >> 1;
+
+        for ( UG_U8 i = 255; (totalWeight > halfWeight); i-- )
+        {
+            totalWeight -= histo[i];
+            threshold = i;
+
+            if (i == 0) break;
+        }
+
+
+        // Sierra Lite Dithering
+
+        UG_S16
+            errorFraction = 0,
+			errorSameLine,
+            errorNextLine[bmp->width],
+			gray;
+
+        memset(errorNextLine, 0, sizeof(errorNextLine));
+
+        for ( UG_S16 y = 0, h = bmp->height; y < h; y++ )
+        {
+            for( UG_S16 x = 0, w = bmp->width; x < w; x++ )
+            {
+                switch(bmp->bpp)
+                {
+                    case BMP_BPP_24:
+                    {
+						//
+                        gray = (p_32[(y*w)+x] & 0x0000FF);
+
+
+                        // Thresholding
+                        if (y < h-1)
+                            c = (((gray + errorNextLine[x] + errorSameLine) < threshold) ? 0 : 0xFF);
+                        else
+                            c = (((gray + errorSameLine) < threshold) ? 0 : 0xFF);
+
+
+                        // Sierra Lite
+                        errorFraction = (((gray + errorSameLine) - c) >> 2);
+
+                        if (x > 0)
+                            errorNextLine[x-1] += errorFraction;
+
+                        if (x < w-1)
+                            errorSameLine = 2 * errorFraction;
+                        else
+                            errorSameLine = 0;
+
+                        errorNextLine[x] = errorFraction;
+
+
+                        p_32[(y*w)+x] = ((c << 16) | (c << 8) | c);
+                    }
+                }
+            }
+        }
+		
+/*
+		// Floyd-Steinberg Dithering Error Difusion
+		errorFraction = (((gray + errorSameLine) - c) >> 4);
+
+		if (x > 0)
+			errorNextLine[x-1] += 3 * errorFraction;
+
+		if (x < w-1)
+		{
+			errorSameLine = 7 * errorFraction;
+			errorNextLine[x+1] = errorFraction;
+		}
+		else
+			errorSameLine = 0;
+
+		errorNextLine[x] += 5 * errorFraction;
+*/
+    }
+
+
+    return UG_RESULT_OK;
+}
+
 
 UG_RESULT UG_FreeBMP( UG_BMP* bmp )
 {
@@ -1875,7 +2065,6 @@ UG_RESULT UG_FreeBMP( UG_BMP* bmp )
 
     return UG_RESULT_OK;
 }
-
 
 void UG_TouchUpdate( UG_S16 xp, UG_S16 yp, UG_U8 state )
 {
