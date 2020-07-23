@@ -936,6 +936,8 @@ UG_ConsoleSetForecolor(UG_COLOR c);
 void
 UG_ConsoleSetBackcolor(UG_COLOR c);
 void
+UG_ConsoleGetCursorPos(UG_S16* x, UG_S16* y);
+void
 UG_SetForecolor(UG_COLOR c);
 void
 UG_SetBackcolor(UG_COLOR c);

@@ -4099,3 +4099,28 @@ _UG_ImageUpdate(UG_WINDOW* wnd, UG_OBJECT* obj)
         obj->state &= ~OBJ_STATE_UPDATE;
     }
 }
+
+void
+UG_ConsoleGetCursorPos(UG_S16* x, UG_S16* y)
+{
+    if (gui == NULL) {
+        return;
+    }
+
+    UG_S16 xpos, ypos;
+
+    xpos = gui->console.x_pos;
+    ypos = gui->console.y_pos;
+
+    if (xpos >= gui->console.x_end) {
+        xpos = gui->console.x_start;
+        ypos += gui->font.char_height + gui->char_v_space;
+    }
+
+    if (y != NULL) {
+        *y = ypos;
+    }
+    if (x != NULL) {
+        *x = xpos;
+    }
+}
